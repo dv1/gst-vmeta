@@ -840,7 +840,7 @@ static void
 gst_lookup_xv_port_from_adaptor (GstXContext * xcontext,
     XvAdaptorInfo * adaptors, int adaptor_no)
 {
-  gint j;
+  guint j;
   gint res;
 
   /* Do we support XvImageMask ? */
@@ -911,11 +911,11 @@ gst_vmetaxvsink_get_xv_support (GstVmetaXvSink * vmetaxvsink,
       (gchar **) g_malloc0 (xcontext->nb_adaptors * sizeof (gchar *));
 
   /* Now fill up our adaptor name array */
-  for (i = 0; i < xcontext->nb_adaptors; i++) {
+  for (i = 0; i < (gint)(xcontext->nb_adaptors); i++) {
     xcontext->adaptors[i] = g_strdup (adaptors[i].name);
   }
 
-  if (vmetaxvsink->adaptor_no != -1 &&
+  if (vmetaxvsink->adaptor_no != (guint)(-1) &&
       vmetaxvsink->adaptor_no < xcontext->nb_adaptors) {
     /* Find xv port from user defined adaptor */
     gst_lookup_xv_port_from_adaptor (xcontext, adaptors,
@@ -924,7 +924,7 @@ gst_vmetaxvsink_get_xv_support (GstVmetaXvSink * vmetaxvsink,
 
   if (!xcontext->xv_port_id) {
     /* Now search for an adaptor that supports XvImageMask */
-    for (i = 0; i < xcontext->nb_adaptors && !xcontext->xv_port_id; i++) {
+    for (i = 0; i < (gint)(xcontext->nb_adaptors) && !xcontext->xv_port_id; i++) {
       gst_lookup_xv_port_from_adaptor (xcontext, adaptors, i);
       vmetaxvsink->adaptor_no = i;
     }
@@ -1029,7 +1029,7 @@ gst_vmetaxvsink_get_xv_support (GstVmetaXvSink * vmetaxvsink,
   XvQueryEncodings (xcontext->disp, xcontext->xv_port_id, &nb_encodings,
       &encodings);
 
-  for (i = 0; i < nb_encodings; i++) {
+  for (i = 0; i < (gint)nb_encodings; i++) {
     GST_LOG_OBJECT (vmetaxvsink,
         "Encoding %d, name %s, max wxh %lux%lu rate %d/%d",
         i, encodings[i].name, encodings[i].width, encodings[i].height,
@@ -1238,7 +1238,7 @@ gst_vmetaxvsink_calculate_pixel_aspect_ratio (GstXContext * xcontext)
   delta = DELTA (0);
   index = 0;
 
-  for (i = 1; i < sizeof (par) / (sizeof (gint) * 2); ++i) {
+  for (i = 1; i < (gint)(sizeof (par) / (sizeof (gint) * 2)); ++i) {
     gdouble this_delta = DELTA (i);
 
     if (this_delta < delta) {
@@ -1377,7 +1377,7 @@ gst_vmetaxvsink_xcontext_get (GstVmetaXvSink * vmetaxvsink)
 
 
   /* Generate the channels list */
-  for (i = 0; i < (sizeof (channels) / sizeof (char *)); i++) {
+  for (i = 0; i < (gint)(sizeof (channels) / sizeof (char *)); i++) {
     XvAttribute *matching_attr = NULL;
 
     /* Retrieve the property atom if it exists. If it doesn't exist,
@@ -1487,7 +1487,7 @@ gst_vmetaxvsink_xcontext_clear (GstVmetaXvSink * vmetaxvsink)
   if (xcontext->last_caps)
     gst_caps_replace (&xcontext->last_caps, NULL);
 
-  for (i = 0; i < xcontext->nb_adaptors; i++) {
+  for (i = 0; i < (gint)(xcontext->nb_adaptors); i++) {
     g_free (xcontext->adaptors[i]);
   }
 
@@ -1550,7 +1550,10 @@ gst_vmetaxvsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
   gint display_par_n, display_par_d;    /* display's PAR */
   guint num, den;
   gint size;
-  static GstAllocationParams params = { 0, 15, 0, 0, };
+  static GstAllocationParams params;
+  
+  params.flags = 0;
+  memset(&params, 0, sizeof(GstAllocationParams));
 
   vmetaxvsink = GST_VMETAXVSINK (bsink);
 
@@ -1571,7 +1574,7 @@ gst_vmetaxvsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
   vmetaxvsink->video_height = info.height;
 
   im_format = gst_vmetaxvsink_get_format_from_info (vmetaxvsink, &info);
-  if (im_format == -1)
+  if (im_format == (guint32)(-1))
     goto invalid_format;
 
   size = info.size;
@@ -2322,7 +2325,7 @@ gst_vmetaxvsink_colorbalance_get_value (GstColorBalance * balance,
 }
 
 static GstColorBalanceType
-gst_vmetaxvsink_colorbalance_get_balance_type (GstColorBalance * balance)
+gst_vmetaxvsink_colorbalance_get_balance_type (G_GNUC_UNUSED GstColorBalance * balance)
 {
   return GST_COLOR_BALANCE_HARDWARE;
 }
