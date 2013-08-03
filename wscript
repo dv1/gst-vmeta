@@ -96,6 +96,7 @@ def configure(conf):
 	  conf.check_cfg(package = 'xext', uselib_store = 'XEXT', args = '--cflags --libs', mandatory = 0):
 		conf.env['VMETAXV_ENABLED'] = 1
 		conf.define('VMETAXV_ENABLED', 1)
+		conf.define('HAVE_XSHM', 1)
 
 
 	# test for Marvell libraries
@@ -148,6 +149,7 @@ def build(bld):
 			use = 'gstvmetacommon',
 			uselib = ['XV', 'XEXT', 'GSTREAMER_VIDEO'] + common_uselib,
 			target = 'gstvmetaxv',
+			defines = '_XOPEN_SOURCE',
 			source = bld.path.ant_glob('src/vmetaxvsink/*.c'),
 			install_path = install_path
 		)

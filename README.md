@@ -5,8 +5,8 @@ About
 -----
 
 This is a set of [GStreamer 1.0](http://gstreamer.freedesktop.org/) plugins for plugins for Marvell's
-hardware video accelerator, called "vMeta". Currently, a decoder is implemented. Encoders and a modified
-xvimagesink will follow soon.
+hardware video accelerator, called "vMeta". Currently, a decoder and a modified xvimagesink are
+implemented. Encoders will follow soon.
 
 Unlike Marvell's official GStreamer 0.10 vMeta plugins, these make use of GStreamer's base classes, thus
 integrating better with the other elements. These plugins also allow for passing on output data directly,
@@ -26,12 +26,16 @@ Available plugins
 -----------------
 
 * `vmetadec` : video decoder plugin
+* `vmetaxvsink` : modified version of the xvimagesink that comes in the gst-plugins-base package;
+  the modifications pass on the physical pointer of DMA buffers directly, instead of memcpy'ing
+  the frame pixels (*NOTE*: this sink will only work properly with Marvell's dovefb Xorg driver)
 
 
 Dependencies
 ------------
 
-You'll need a GStreamer 1.0 installation, and Marvell's IPP package. 
+You'll need a GStreamer 1.0 installation, and Marvell's IPP package. To get the vmetaxvsink plugin to work,
+you need an Xorg installation, and the dovefb Xorg driver from Marvell.
 
 
 Building and installing

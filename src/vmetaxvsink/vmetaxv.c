@@ -29,7 +29,7 @@ static gboolean
 plugin_init (GstPlugin * plugin)
 {
   if (!gst_element_register (plugin, "vmetaxvsink",
-          GST_RANK_PRIMARY, GST_TYPE_VMETAXVSINK))
+          GST_RANK_PRIMARY + 5, GST_TYPE_VMETAXVSINK))
     return FALSE;
 
   GST_DEBUG_CATEGORY_INIT (gst_debug_vmetaxvsink, "vmetaxvsink", 0,

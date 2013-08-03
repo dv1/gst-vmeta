@@ -110,9 +110,7 @@
 
 /* for developers: there are two useful tools : xvinfo and xvattr */
 
-#ifdef HAVE_CONFIG_H
 #include "config.h"
-#endif
 
 /* Our interfaces */
 #include <gst/video/navigation.h>
@@ -130,6 +128,9 @@
 /* for XkbKeycodeToKeysym */
 #include <X11/XKBlib.h>
 
+#include "../common/vmeta_bufferpool.h"
+#include "vmetaxvpool.h"
+
 GST_DEBUG_CATEGORY_EXTERN (GST_CAT_PERFORMANCE);
 GST_DEBUG_CATEGORY_EXTERN (gst_debug_vmetaxvsink);
 #define GST_CAT_DEFAULT gst_debug_vmetaxvsink
@@ -145,6 +146,20 @@ typedef struct
 MotifWmHints, MwmHints;
 
 #define MWM_HINTS_DECORATIONS   (1L << 1)
+
+/* FIXME: the following _UGLY_ MAGIC and global arrays are hacks to
+ * make MIT-SHM work on physical continuous memory.
+ * It should be replaced by a formal way instead (another X extension?)
+ * Anyway, let's just make it work first. :(
+ */
+#define VMETA_SHM_MAGIC1  0x13572468
+#define VMETA_SHM_MAGIC2  0x24681357
+#define MAX_QUEUE_NUM   60
+
+static int gnShmNum;
+static GstBuffer *gShmBuf[MAX_QUEUE_NUM];
+static unsigned long gShmAddr[MAX_QUEUE_NUM];
+static unsigned long gShmSize[MAX_QUEUE_NUM];
 
 static void gst_vmetaxvsink_reset (GstVmetaXvSink * vmetaxvsink);
 static void gst_vmetaxvsink_xwindow_update_geometry (GstVmetaXvSink *
@@ -218,6 +233,82 @@ G_DEFINE_TYPE_WITH_CODE (GstVmetaXvSink, gst_vmetaxvsink, GST_TYPE_VIDEO_SINK,
 /* ============================================================= */
 
 
+/* vmeta buffers */
+static void vmeta_buf_init()
+{     
+  int i;
+  gnShmNum = 0;
+  for(i=0; i<MAX_QUEUE_NUM; i++) {
+    gShmBuf[i] = NULL;
+    gShmAddr[i] = 0;
+    gShmSize[i] = 0;
+  }
+}
+
+static void vmeta_buf_reinit()
+{
+  int i;
+  GstBuffer *buf;
+  gnShmNum = 0;
+  for(i=0; i<MAX_QUEUE_NUM; i++) {
+    if(gShmAddr[i] != 0) {
+      buf = gShmBuf[i];
+      gShmBuf[i] = NULL;
+      gShmAddr[i] = 0;
+      gShmSize[i] = 0;
+      if(buf)
+        gst_buffer_unref(buf);
+    }
+  }
+}
+
+static void vmeta_buf_add(GstBuffer *buf, unsigned long p, unsigned long s)
+{
+  int i;
+  for(i=0; i<MAX_QUEUE_NUM; i++) {
+    if(gShmAddr[i] == p)
+      return;
+  }
+  for(i=0; i<MAX_QUEUE_NUM; i++) {
+    if(gShmAddr[i] == 0) {
+      gst_buffer_ref(buf);
+      gShmBuf[i] = buf;
+      gShmAddr[i] = p;
+      gShmSize[i] = s;
+      gnShmNum++;
+      return;
+    }
+  }
+}
+
+static void vmeta_buf_del(unsigned long p)
+{
+  int i;
+  GstBuffer *buf;
+  for(i=0; i<MAX_QUEUE_NUM; i++) {
+    if(p >= gShmAddr[i] && p < gShmAddr[i] + gShmSize[i]) {
+      buf = gShmBuf[i];
+      gShmBuf[i] = NULL;
+      gShmAddr[i] = 0;
+      gShmSize[i] = 0;
+      if(buf)
+        gst_buffer_unref(buf);
+      gnShmNum--;
+      return;
+    }
+  }
+}
+
+static unsigned long vmeta_buf_chksum(unsigned long *start, unsigned long *end)
+{
+  unsigned long n = 0;
+  unsigned long *p = start;
+  do {
+    n ^= *p++;
+  } while (p < end);
+  return n;
+}
+
 /* We are called with the x_lock taken */
 static void
 gst_vmetaxvsink_xwindow_draw_borders (GstVmetaXvSink * vmetaxvsink,
@@ -265,13 +356,16 @@ gst_vmetaxvsink_xwindow_draw_borders (GstVmetaXvSink * vmetaxvsink,
 /* This function puts a GstVmetaXv on a GstVmetaXvSink's window. Returns FALSE
  * if no window was available  */
 static gboolean
-gst_vmetaxvsink_xvimage_put (GstVmetaXvSink * vmetaxvsink, GstBuffer * xvimage)
+gst_vmetaxvsink_xvimage_put (GstVmetaXvSink * vmetaxvsink, GstBuffer * xvimage, GstVmetaBufferMeta *vmeta_meta)
 {
   GstVmetaXvMeta *meta;
   GstVideoCropMeta *crop;
   GstVideoRectangle result;
   gboolean draw_border = FALSE;
   GstVideoRectangle src, dst;
+  unsigned long paddr = 0;
+  unsigned long *start = NULL;
+  unsigned long *end = NULL;
 
   /* We take the flow_lock. If expose is in there we don't want to run
      concurrently from the data flow thread */
@@ -352,6 +446,29 @@ gst_vmetaxvsink_xvimage_put (GstVmetaXvSink * vmetaxvsink, GstBuffer * xvimage)
         result);
     vmetaxvsink->redraw_border = FALSE;
   }
+
+#ifdef HAVE_XSHM
+  /* Check buffer for vMeta */
+  {
+    if (vmeta_meta != NULL)
+      paddr = vmeta_meta->dma_mem->phys_addr;
+  
+    GST_LOG_OBJECT (vmetaxvsink, "Checking BMM buffer paddr: %p", paddr);
+  
+    /* Use VMETA BUF */
+    if(paddr != 0) {
+      start = end = (unsigned long *)(meta->xvimage->data);
+      *end++ = VMETA_SHM_MAGIC1;
+      *end++ = 1;
+      *end++ = paddr;
+      *end = vmeta_buf_chksum(start, end);
+      GST_LOG_OBJECT (vmetaxvsink, "Add vMeta Shm buffer: %x (chksum %x)", paddr, *end);
+      vmeta_buf_add(xvimage, paddr, meta->xvimage->data_size);
+      GST_LOG_OBJECT (vmetaxvsink, "Dump vMeta Shm buffer after add: %d", gnShmNum);
+    }
+  }
+#endif
+
 #ifdef HAVE_XSHM
   if (vmetaxvsink->xcontext->use_xshm) {
     GST_LOG_OBJECT (vmetaxvsink,
@@ -368,6 +485,11 @@ gst_vmetaxvsink_xvimage_put (GstVmetaXvSink * vmetaxvsink, GstBuffer * xvimage)
   } else
 #endif /* HAVE_XSHM */
   {
+    GST_LOG_OBJECT (vmetaxvsink,
+        "XvPutImage with image %dx%d and window %dx%d, from xvimage %"
+        GST_PTR_FORMAT, meta->width, meta->height,
+        vmetaxvsink->render_rect.w, vmetaxvsink->render_rect.h, xvimage);
+
     XvPutImage (vmetaxvsink->xcontext->disp,
         vmetaxvsink->xcontext->xv_port_id,
         vmetaxvsink->xwindow->win,
@@ -376,6 +498,52 @@ gst_vmetaxvsink_xvimage_put (GstVmetaXvSink * vmetaxvsink, GstBuffer * xvimage)
   }
 
   XSync (vmetaxvsink->xcontext->disp, FALSE);
+
+  /* Check VMETA BUF */
+  /* FIXME: This system where the X client provides one magic value, and the
+   * Xv DDX replaces it with another to signal completion, is inherently
+   * broken (#12644). It needs to be reworked.
+   *
+   * Although the common case is that when XvShmPutImage() returns, the frame
+   * has actually been drawn, it is not safe to assume that all XvShmPutImage()
+   * requests actually make it down to the driver. Similarly, not all frames
+   * will be drawn before that call returns.
+   * To avoid the situation where we never free the buffer being handed down
+   * in this function, we just free it unconditionally now, assuming that it
+   * has been drawn, or never will be. In some rare circumstances, this will
+   * result in stale/random data from the vmeta memory region being drawn on
+   * screen. Who cares, at least it's not crashing/hanging.
+   */
+#if 0
+  if (paddr != 0)
+    vmeta_buf_del(paddr);
+#else
+  while (paddr != 0) {
+    int i, n;
+    GST_LOG_OBJECT (vmetaxvsink, "Checking vMeta free buffers: %x\n", *start);
+    end = start;
+    if (*end++ == VMETA_SHM_MAGIC2) {
+      n = *end;
+      GST_LOG_OBJECT (vmetaxvsink, "Free vMeta Buffer n = %d\n", n);
+      if(n == 0)
+        break;
+
+      end = start + 2 + n;
+      GST_LOG_OBJECT (vmetaxvsink, "Checking vMeta buffer chksum %x =? %x\n", *end, vmeta_buf_chksum(start, end));
+      if (vmeta_buf_chksum(start, end) == *end) {
+        GST_LOG_OBJECT (vmetaxvsink, "vMeta buffer chksum OK: %x\n", *end);
+        end = start + 2;
+        for(i=0; i<n; i++) {
+          paddr = *end++;
+          GST_LOG_OBJECT (vmetaxvsink, "Del vMeta buffer [%d/%d]: %x\n", i, n, paddr);
+          vmeta_buf_del(paddr);
+        }
+        GST_LOG_OBJECT (vmetaxvsink, "Dump vMeta buffer after del: %d\n", gnShmNum);
+      }
+    }
+    break;
+  }
+#endif
 
   g_mutex_unlock (&vmetaxvsink->x_lock);
 
@@ -1186,6 +1354,9 @@ gst_vmetaxvsink_manage_event_thread (GstVmetaXvSink * vmetaxvsink)
     if (vmetaxvsink->event_thread) {
       GST_DEBUG_OBJECT (vmetaxvsink, "stop xevent thread, expose %d, events %d",
           vmetaxvsink->handle_expose, vmetaxvsink->handle_events);
+
+      vmeta_buf_reinit();
+
       vmetaxvsink->running = FALSE;
       /* grab thread and mark it as NULL */
       thread = vmetaxvsink->event_thread;
@@ -1815,10 +1986,16 @@ gst_vmetaxvsink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
   GstVmetaXvSink *vmetaxvsink;
   GstVmetaXvMeta *meta;
   GstBuffer *to_put;
+  GstVmetaBufferMeta *vmeta_meta;
 
   vmetaxvsink = GST_VMETAXVSINK (vsink);
 
   meta = gst_buffer_get_vmetaxv_meta (buf);
+#ifdef HAVE_XSHM
+  vmeta_meta = GST_VMETA_BUFFER_META_GET(buf);
+#else
+  vmeta_meta = NULL;
+#endif
 
   if (meta && meta->sink == vmetaxvsink) {
     /* If this buffer has been allocated using our buffer management we simply
@@ -1850,24 +2027,27 @@ gst_vmetaxvsink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
     if (res != GST_FLOW_OK)
       goto no_buffer;
 
-    GST_CAT_LOG_OBJECT (GST_CAT_PERFORMANCE, vmetaxvsink,
-        "slow copy into bufferpool buffer %p", to_put);
+    if (vmeta_meta == NULL)
+    {
+      GST_CAT_LOG_OBJECT (GST_CAT_PERFORMANCE, vmetaxvsink,
+          "slow copy into bufferpool buffer %p", to_put);
 
-    if (!gst_video_frame_map (&src, &vmetaxvsink->info, buf, GST_MAP_READ))
-      goto invalid_buffer;
+      if (!gst_video_frame_map (&src, &vmetaxvsink->info, buf, GST_MAP_READ))
+        goto invalid_buffer;
 
-    if (!gst_video_frame_map (&dest, &vmetaxvsink->info, to_put, GST_MAP_WRITE)) {
+      if (!gst_video_frame_map (&dest, &vmetaxvsink->info, to_put, GST_MAP_WRITE)) {
+        gst_video_frame_unmap (&src);
+        goto invalid_buffer;
+      }
+
+      gst_video_frame_copy (&dest, &src);
+
+      gst_video_frame_unmap (&dest);
       gst_video_frame_unmap (&src);
-      goto invalid_buffer;
     }
-
-    gst_video_frame_copy (&dest, &src);
-
-    gst_video_frame_unmap (&dest);
-    gst_video_frame_unmap (&src);
   }
 
-  if (!gst_vmetaxvsink_xvimage_put (vmetaxvsink, to_put))
+  if (!gst_vmetaxvsink_xvimage_put (vmetaxvsink, to_put, vmeta_meta))
     goto no_window;
 
 done:
@@ -2181,7 +2361,7 @@ gst_vmetaxvsink_expose (GstVideoOverlay * overlay)
 
   GST_DEBUG ("doing expose");
   gst_vmetaxvsink_xwindow_update_geometry (vmetaxvsink);
-  gst_vmetaxvsink_xvimage_put (vmetaxvsink, NULL);
+  gst_vmetaxvsink_xvimage_put (vmetaxvsink, NULL, NULL);
 }
 
 static void
@@ -2754,6 +2934,8 @@ gst_vmetaxvsink_finalize (GObject * object)
 static void
 gst_vmetaxvsink_init (GstVmetaXvSink * vmetaxvsink)
 {
+  vmeta_buf_init();
+
   vmetaxvsink->display_name = NULL;
   vmetaxvsink->adaptor_no = 0;
   vmetaxvsink->xcontext = NULL;

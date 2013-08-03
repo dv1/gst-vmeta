@@ -20,6 +20,8 @@
 #ifndef __GST_VMETAXVPOOL_H__
 #define __GST_VMETAXVPOOL_H__
 
+#include "config.h"
+
 #ifdef HAVE_XSHM
 #include <sys/types.h>
 #include <sys/ipc.h>
@@ -35,6 +37,8 @@
 
 #include <string.h>
 #include <math.h>
+
+#include <gst/gst.h>
 
 
 G_BEGIN_DECLS

@@ -17,12 +17,10 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifdef HAVE_CONFIG_H
 #include "config.h"
-#endif
 
 /* Object header */
-#include "vmetaxvsink.h"
+#include "vmetaxvpool.h"
 
 /* Debugging category */
 #include <gst/gstinfo.h>
@@ -32,9 +30,14 @@
 #include <gst/video/gstvideometa.h>
 #include <gst/video/gstvideopool.h>
 
+#include "../common/vmeta_bufferpool.h"
+
 
 GST_DEBUG_CATEGORY_EXTERN (gst_debug_vmetaxvpool);
 #define GST_CAT_DEFAULT gst_debug_vmetaxvpool
+
+
+#define ALIGN(n, a) ( ((n) + ((a) - 1)) & ~((a) - 1) )
 
 
 struct _GstVmetaXvBufferPoolPrivate
@@ -106,6 +109,7 @@ gst_buffer_add_vmetaxv_meta (GstBuffer * buffer, GstVmetaXvBufferPool * xvpool)
   GstVmetaXvMeta *meta;
   gint width, height, im_format, align = 15, offset;
   GstVmetaXvBufferPoolPrivate *priv;
+  GstVmetaBufferMeta *vmeta_meta = GST_VMETA_BUFFER_META_GET(buffer);
 
   priv = xvpool->priv;
   vmetaxvsink = xvpool->sink;
@@ -128,6 +132,14 @@ gst_buffer_add_vmetaxv_meta (GstBuffer * buffer, GstVmetaXvBufferPool * xvpool)
   meta->height = priv->info.height;
   meta->sink = gst_object_ref (vmetaxvsink);
   meta->im_format = im_format;
+
+  if (vmeta_meta != NULL) {
+    meta->width = ALIGN(meta->width, 16);
+    meta->height = ALIGN(meta->height, 16);
+  } else {
+    meta->width = ALIGN(meta->width, 8);
+    meta->height = ALIGN(meta->height, 8);
+  }
 
   GST_DEBUG_OBJECT (vmetaxvsink, "creating image %p (%dx%d)", buffer,
       width, height);

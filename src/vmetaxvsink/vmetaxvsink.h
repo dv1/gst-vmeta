@@ -20,6 +20,8 @@
 #ifndef __GST_VMETAXVSINK_H__
 #define __GST_VMETAXVSINK_H__
 
+#include "config.h"
+
 #include <gst/video/gstvideosink.h>
 
 #ifdef HAVE_XSHM
