@@ -92,11 +92,10 @@ def configure(conf):
 
 	# test for X11 dependencies (if not present, the vmetaxv sink element will not be built)
 
-# TODO: turned OFF for now; vmetaxv plugin is unfinished and very unstable
-#	if conf.check_cfg(package = 'xv', uselib_store = 'XV', args = '--cflags --libs', mandatory = 0) and \
-#	  conf.check_cfg(package = 'xext', uselib_store = 'XEXT', args = '--cflags --libs', mandatory = 0):
-#		conf.env['VMETAXV_ENABLED'] = 1
-#		conf.define('VMETAXV_ENABLED', 1)
+	if conf.check_cfg(package = 'xv', uselib_store = 'XV', args = '--cflags --libs', mandatory = 0) and \
+	  conf.check_cfg(package = 'xext', uselib_store = 'XEXT', args = '--cflags --libs', mandatory = 0):
+		conf.env['VMETAXV_ENABLED'] = 1
+		conf.define('VMETAXV_ENABLED', 1)
 
 
 	# test for Marvell libraries
@@ -147,8 +146,8 @@ def build(bld):
 			features = ['c', 'cshlib'],
 			includes = ['.'],
 			use = 'gstvmetacommon',
-			uselib = ['XV', 'XEXT'] + common_uselib,
-			target = 'gstvmeta',
+			uselib = ['XV', 'XEXT', 'GSTREAMER_VIDEO'] + common_uselib,
+			target = 'gstvmetaxv',
 			source = bld.path.ant_glob('src/vmetaxvsink/*.c'),
 			install_path = install_path
 		)
