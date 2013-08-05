@@ -112,10 +112,7 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 		"video/mpeg, "
 		"parsed = (boolean) true, "
 		"systemstream = (boolean) false, "
-		"mpegversion = (int) { 1, 2 }, "
-		"width = (int) [ 16, 2048 ], "
-		"height = (int) [ 16, 2048 ], "
-		"framerate = (fraction) [ 0, MAX ]; "
+		"mpegversion = (int) [ 1, 2 ]; "
 
 		/* IPP_VIDEO_STRM_FMT_MPG4 */
 		/* xvid and divx are supported as MPEG-4 streams */
@@ -149,7 +146,7 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 	GST_PAD_SRC,
 	GST_PAD_ALWAYS,
 	GST_STATIC_CAPS(
-		"video/x-raw,"
+		"video/x-raw, "
 		"format = (string) UYVY, "
 		"width = (int) [ 16, 2048 ], "
 		"height = (int) [ 16, 2048 ], "
