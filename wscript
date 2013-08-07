@@ -75,9 +75,10 @@ def configure(conf):
 	add_compiler_flags(conf, conf.env, compiler_flags, 'C', 'C')
 
 
-	# test for pthreads and the math library
+	# test for basic dependencies
 
 	conf.check_cc(lib = 'm', uselib_store = 'M', mandatory = 1)
+	conf.check_cc(lib = 'rt', uselib_store = 'RT', mandatory = 1)
 
 	if conf.check_cc(lib = 'pthread', uselib_store = 'PTHREAD', mandatory = 1):
 		conf.env['CFLAGS_PTHREAD'] += ['-pthread']
@@ -93,7 +94,7 @@ def configure(conf):
 	# test for X11 dependencies (if not present, the vmetaxv sink element will not be built)
 
 	if conf.check_cfg(package = 'xv', uselib_store = 'XV', args = '--cflags --libs', mandatory = 0) and \
-	  conf.check_cfg(package = 'xext', uselib_store = 'XEXT', args = '--cflags --libs', mandatory = 0):
+	   conf.check_cfg(package = 'xext', uselib_store = 'XEXT', args = '--cflags --libs', mandatory = 0):
 		conf.env['VMETAXV_ENABLED'] = 1
 		conf.define('VMETAXV_ENABLED', 1)
 		conf.define('HAVE_XSHM', 1)
@@ -102,11 +103,13 @@ def configure(conf):
 	# test for Marvell libraries
 
 	conf.check_cc(header_name = 'codecVC.h', uselib_store = 'VMETA', mandatory = 1)
-	conf.check_cc(lib = 'miscgen', uselib = 'PTHREAD M', uselib_store = 'VMETA', mandatory = 1)
-	conf.check_cc(lib = 'vmeta', uselib = 'PTHREAD', uselib_store = 'VMETA', mandatory = 1)
+	conf.check_cc(lib = 'miscgen', uselib = 'PTHREAD M RT', uselib_store = 'VMETA', mandatory = 1)
+	conf.check_cc(lib = 'vmeta', uselib = 'PTHREAD RT', uselib_store = 'VMETA', mandatory = 1)
 	conf.check_cc(lib = 'vmetahal', uselib_store = 'VMETA', mandatory = 1)
 	conf.check_cc(lib = 'codecvmetadec', uselib = 'PTHREAD', uselib_store = 'VMETA', mandatory = 1)
-
+	if conf.check_cc(function_name = 'vdec_os_api_suspend_check', uselib = 'VMETA PTHREAD M RT', header_name = "vdec_os_api.h", mandatory = 0) and \
+	   conf.check_cc(function_name = 'vdec_os_api_suspend_ready', uselib = 'VMETA PTHREAD M RT', header_name = "vdec_os_api.h", mandatory = 0):
+		conf.define('HAVE_VDEC_OS_SUSPEND', 1)
 
 	conf.env['PLUGIN_INSTALL_PATH'] = os.path.expanduser(conf.options.plugin_install_path)
 
@@ -121,7 +124,7 @@ def configure(conf):
 
 
 def build(bld):
-	common_uselib = ['GSTREAMER', 'GSTREAMER_BASE', 'VMETA', 'PTHREAD', 'M']
+	common_uselib = ['GSTREAMER', 'GSTREAMER_BASE', 'VMETA', 'PTHREAD', 'M', 'RT']
 	install_path = bld.env['PLUGIN_INSTALL_PATH']
 
 	bld(

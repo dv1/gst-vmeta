@@ -459,6 +459,7 @@ static gboolean gst_vmeta_dec_fill_param_set(GstVmetaDec *vmeta_dec, GstVideoCod
 }
 
 
+#ifdef HAVE_VDEC_SUSPEND
 static gboolean gst_vmeta_dec_suspend_and_resume(GstVmetaDec *vmeta_dec)
 {
 	IppCodecStatus ret;
@@ -487,6 +488,12 @@ static gboolean gst_vmeta_dec_suspend_and_resume(GstVmetaDec *vmeta_dec)
 
 	return TRUE;
 }
+#else
+static gboolean gst_vmeta_dec_suspend_and_resume(G_GNUC_UNUSED GstVmetaDec *vmeta_dec)
+{
+	return TRUE;
+}
+#endif
 
 
 /* TODO:
