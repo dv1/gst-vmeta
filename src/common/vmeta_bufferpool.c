@@ -230,10 +230,13 @@ static void gst_vmeta_buffer_pool_finalize(GObject *object)
 	GstVmetaBufferPool *vmeta_pool = GST_VMETA_BUFFER_POOL(object);
 
 	GST_DEBUG_OBJECT(vmeta_pool, "shutting down vMeta buffer pool");
-
-	gst_object_unref(vmeta_pool->allocator);
 	
 	G_OBJECT_CLASS (gst_vmeta_buffer_pool_parent_class)->finalize(object);
+
+	/* unref'ing AFTER calling the parent class' finalize function, since the parent
+	 * class will shut down the allocated memory blocks, for which the allocator must
+	 * exist */
+	gst_object_unref(vmeta_pool->allocator);
 }
 
 

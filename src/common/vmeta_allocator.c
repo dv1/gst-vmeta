@@ -32,6 +32,8 @@ GST_DEBUG_CATEGORY_STATIC(vmetaallocator_debug);
 
 static char const * gst_vmeta_get_alloctype_string(GstVmetaAllocatorType type);
 
+static void gst_vmeta_allocator_finalize(GObject *object);
+
 static GstMemory* gst_vmeta_allocator_alloc(GstAllocator *allocator, gsize size, GstAllocationParams *params);
 static void gst_vmeta_allocator_free(GstAllocator *allocator, GstMemory *memory);
 static gpointer gst_vmeta_allocator_map(GstMemory *mem, gsize maxsize, GstMapFlags flags);
@@ -51,7 +53,7 @@ GstAllocator* gst_vmeta_allocator_new(GstVmetaAllocatorType type)
 
 	GST_VMETA_ALLOCATOR(allocator)->type = type;
 
-	return gst_object_ref(allocator);
+	return allocator;
 }
 
 
@@ -71,10 +73,12 @@ static char const * gst_vmeta_get_alloctype_string(GstVmetaAllocatorType type)
 
 static void gst_vmeta_allocator_class_init(GstVmetaAllocatorClass *klass)
 {
+	GObjectClass *object_class = G_OBJECT_CLASS(klass);
 	GstAllocatorClass *parent_class = GST_ALLOCATOR_CLASS(klass);
 
-	parent_class->alloc = GST_DEBUG_FUNCPTR(gst_vmeta_allocator_alloc);
-	parent_class->free  = GST_DEBUG_FUNCPTR(gst_vmeta_allocator_free);
+	object_class->finalize = GST_DEBUG_FUNCPTR(gst_vmeta_allocator_finalize);
+	parent_class->alloc    = GST_DEBUG_FUNCPTR(gst_vmeta_allocator_alloc);
+	parent_class->free     = GST_DEBUG_FUNCPTR(gst_vmeta_allocator_free);
 
 	GST_DEBUG_CATEGORY_INIT(vmetaallocator_debug, "vmetaallocator", 0, "vMeta DMA memory/allocator");
 }
@@ -90,6 +94,13 @@ static void gst_vmeta_allocator_init(GstVmetaAllocator *allocator)
 	parent->mem_copy    = GST_DEBUG_FUNCPTR(gst_vmeta_allocator_copy);
 	parent->mem_share   = GST_DEBUG_FUNCPTR(gst_vmeta_allocator_share);
 	parent->mem_is_span = GST_DEBUG_FUNCPTR(gst_vmeta_allocator_is_span);
+}
+
+
+static void gst_vmeta_allocator_finalize(GObject *object)
+{
+	GST_DEBUG_OBJECT(object, "shutting down vMeta allocator");
+	G_OBJECT_CLASS(gst_vmeta_allocator_parent_class)->finalize(object);
 }
 
 
