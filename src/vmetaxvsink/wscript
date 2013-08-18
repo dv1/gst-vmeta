@@ -1,0 +1,27 @@
+#!/usr/bin/env python
+
+def configure(conf):
+	# test for X11 dependencies (if not present, the vmetaxv sink element will not be built)
+
+	if conf.check_cfg(package = 'xv', uselib_store = 'XV', args = '--cflags --libs', mandatory = 0) and \
+	   conf.check_cfg(package = 'xext', uselib_store = 'XEXT', args = '--cflags --libs', mandatory = 0):
+		conf.env['VMETAXV_ENABLED'] = 1
+		conf.define('VMETAXV_ENABLED', 1)
+		conf.define('HAVE_XSHM', 1)
+
+
+def build(bld):
+	common_uselib = bld.env['COMMON_USELIB']
+	install_path = bld.env['PLUGIN_INSTALL_PATH']
+	if bld.env['VMETAXV_ENABLED']:
+		bld(
+			features = ['c', 'cshlib'],
+			includes = ['../..'],
+			use = 'gstvmetacommon',
+			uselib = ['XV', 'XEXT', 'GSTREAMER_VIDEO'] + common_uselib,
+			target = 'gstvmetaxv',
+			defines = '_XOPEN_SOURCE',
+			source = bld.path.ant_glob('*.c'),
+			install_path = install_path
+		)
+

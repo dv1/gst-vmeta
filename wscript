@@ -91,15 +91,6 @@ def configure(conf):
 	conf.check_cfg(package = 'gstreamer-video-1.0 >= 1.0.0', uselib_store = 'GSTREAMER_VIDEO', args = '--cflags --libs', mandatory = 1)
 
 
-	# test for X11 dependencies (if not present, the vmetaxv sink element will not be built)
-
-	if conf.check_cfg(package = 'xv', uselib_store = 'XV', args = '--cflags --libs', mandatory = 0) and \
-	   conf.check_cfg(package = 'xext', uselib_store = 'XEXT', args = '--cflags --libs', mandatory = 0):
-		conf.env['VMETAXV_ENABLED'] = 1
-		conf.define('VMETAXV_ENABLED', 1)
-		conf.define('HAVE_XSHM', 1)
-
-
 	# test for Marvell libraries
 
 	conf.check_cc(header_name = 'codecVC.h', uselib_store = 'VMETA', mandatory = 1)
@@ -115,16 +106,21 @@ def configure(conf):
 
 	conf.define('GST_PACKAGE_NAME', conf.options.with_package_name)
 	conf.define('GST_PACKAGE_ORIGIN', conf.options.with_package_origin)
+	conf.define('GST_LICENSE', 'LGPL', quote=True)
 	conf.define('PACKAGE', "gst-vmeta")
 	conf.define('VERSION', "1.0")
 
+	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'VMETA', 'PTHREAD', 'M', 'RT']
+
+
+	conf.recurse('src/vmetaxvsink')
 
 	conf.write_config_header('config.h')
 
 
 
 def build(bld):
-	common_uselib = ['GSTREAMER', 'GSTREAMER_BASE', 'VMETA', 'PTHREAD', 'M', 'RT']
+	common_uselib = bld.env['COMMON_USELIB']
 	install_path = bld.env['PLUGIN_INSTALL_PATH']
 
 	bld(
@@ -145,15 +141,5 @@ def build(bld):
 		install_path = install_path
 	)
 
-	if bld.env['VMETAXV_ENABLED']:
-		bld(
-			features = ['c', 'cshlib'],
-			includes = ['.'],
-			use = 'gstvmetacommon',
-			uselib = ['XV', 'XEXT', 'GSTREAMER_VIDEO'] + common_uselib,
-			target = 'gstvmetaxv',
-			defines = '_XOPEN_SOURCE',
-			source = bld.path.ant_glob('src/vmetaxvsink/*.c'),
-			install_path = install_path
-		)
+	bld.recurse('src/vmetaxvsink')
 

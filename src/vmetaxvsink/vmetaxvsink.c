@@ -520,25 +520,25 @@ gst_vmetaxvsink_xvimage_put (GstVmetaXvSink * vmetaxvsink, GstBuffer * xvimage, 
 #else
   while (paddr != 0) {
     int i, n;
-    GST_LOG_OBJECT (vmetaxvsink, "Checking vMeta free buffers: %x\n", *start);
+    GST_LOG_OBJECT (vmetaxvsink, "Checking vMeta free buffers: %x", *start);
     end = start;
     if (*end++ == VMETA_SHM_MAGIC2) {
       n = *end;
-      GST_LOG_OBJECT (vmetaxvsink, "Free vMeta Buffer n = %d\n", n);
+      GST_LOG_OBJECT (vmetaxvsink, "Free vMeta Buffer n = %d", n);
       if(n == 0)
         break;
 
       end = start + 2 + n;
-      GST_LOG_OBJECT (vmetaxvsink, "Checking vMeta buffer chksum %x =? %x\n", *end, vmeta_buf_chksum(start, end));
+      GST_LOG_OBJECT (vmetaxvsink, "Checking vMeta buffer chksum %x =? %x", *end, vmeta_buf_chksum(start, end));
       if (vmeta_buf_chksum(start, end) == *end) {
-        GST_LOG_OBJECT (vmetaxvsink, "vMeta buffer chksum OK: %x\n", *end);
+        GST_LOG_OBJECT (vmetaxvsink, "vMeta buffer chksum OK: %x", *end);
         end = start + 2;
         for(i=0; i<n; i++) {
           paddr = *end++;
-          GST_LOG_OBJECT (vmetaxvsink, "Del vMeta buffer [%d/%d]: %x\n", i, n, paddr);
+          GST_LOG_OBJECT (vmetaxvsink, "Del vMeta buffer [%d/%d]: %x", i, n, paddr);
           vmeta_buf_del(paddr);
         }
-        GST_LOG_OBJECT (vmetaxvsink, "Dump vMeta buffer after del: %d\n", gnShmNum);
+        GST_LOG_OBJECT (vmetaxvsink, "Dump vMeta buffer after del: %d", gnShmNum);
       }
     }
     break;
@@ -548,6 +548,8 @@ gst_vmetaxvsink_xvimage_put (GstVmetaXvSink * vmetaxvsink, GstBuffer * xvimage, 
   g_mutex_unlock (&vmetaxvsink->x_lock);
 
   g_mutex_unlock (&vmetaxvsink->flow_lock);
+
+  //g_usleep(10000);
 
   return TRUE;
 }
